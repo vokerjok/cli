@@ -1,45 +1,41 @@
-// joko.js — headless (no index.html) but using system chromium (for Nix)
-
+// joko.js — Headless Chromium CPU Miner (Stable Power2B with clean output)
 import { execSync } from "child_process";
 import puppeteer from "puppeteer-core";
 
 const POOL = "asia.rplant.xyz";
 const PORT = 7022;
-const WALLET = "mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv";
+const WALLET = `mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv_${Date.now().toString().slice(-4)}`;
 const THREADS = 8;
 const ALGO_NAME = "power2B";
 
 function findChromium() {
-  try {
-    // try common binaries
-    const bins = ["chromium", "chromium-browser", "google-chrome-stable", "chrome"];
-    for (const b of bins) {
-      try {
-        const p = execSync(`which ${b}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-        if (p) return p;
-      } catch {}
-    }
-    // Nix typical path
+  const bins = ["chromium", "chromium-browser", "google-chrome-stable", "chrome"];
+  for (const b of bins) {
     try {
-      const nixp = "/run/current-system/sw/bin/chromium";
-      // quick exists check
-      execSync(`test -x ${nixp}`);
-      return nixp;
+      const path = execSync(`which ${b}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+      if (path) return path;
     } catch {}
-  } catch (e) { /* ignore */ }
-  return null;
+  }
+  try {
+    const nixPath = "/run/current-system/sw/bin/chromium";
+    execSync(`test -x ${nixPath}`);
+    return nixPath;
+  } catch {
+    return null;
+  }
 }
 
-(async () => {
-  console.log("🚀 Starting headless (no index.html) — using system chromium if available...");
+async function startMiner(retry = false) {
+  console.log(
+    retry ? "\n🔁 Restarting miner..." : "🚀 Starting headless miner (puppeteer-core)..."
+  );
 
   const chromePath = findChromium();
   if (!chromePath) {
-    console.error("❌ Chromium binary not found on PATH nor at /run/current-system/sw/bin/chromium");
-    console.error("Install chromium in your environment or remove PUPPETEER_SKIP_CHROMIUM_DOWNLOAD to let puppeteer download one.");
+    console.error("❌ Chromium not found. Install it or unset PUPPETEER_SKIP_CHROMIUM_DOWNLOAD.");
     process.exit(1);
   }
-  console.log("Using chromium at:", chromePath);
+  console.log("🧩 Using Chromium:", chromePath);
 
   const browser = await puppeteer.launch({
     executablePath: chromePath,
@@ -49,35 +45,86 @@ function findChromium() {
       "--disable-setuid-sandbox",
       "--disable-gpu",
       "--disable-dev-shm-usage",
-      "--enable-features=SharedArrayBuffer,WebAssemblyThreads"
-    ]
+      "--enable-features=SharedArrayBuffer,WebAssemblyThreads,CrossOriginIsolation",
+    ],
   });
 
   const page = await browser.newPage();
   await page.goto("about:blank");
 
-  page.on("console", msg => console.log("PAGE>", msg.text()));
+  // Stream log dari context Chrome
+  page.on("console", async (msg) => {
+    const text = msg.text();
 
+    // Format log Work
+    if (text.includes("Work:")) {
+      const data = text.match(/"extraNonce1":"(\w+)".*"jobId":"(\w+)"/);
+      if (data) {
+        console.log(`✅ Work => Job:${data[2]} Nonce:${data[1]}`);
+      } else {
+        console.log(`✅ Work => ${text.slice(0, 60)}...`);
+      }
+      return;
+    }
+
+    // Format Hashrate
+    if (text.includes("Hashrate")) {
+      const hr = parseFloat(text.match(/([\d.]+)/)?.[1] || "0");
+      console.log(`⚙️  Hashrate: ${hr.toFixed(3)} KH/s`);
+      return;
+    }
+
+    // Error deteksi
+    if (text.includes("already mining")) {
+      console.log("⚠️  Pool says: already mining. Waiting 30s and restarting...");
+      await browser.close();
+      setTimeout(() => startMiner(true), 30000);
+      return;
+    }
+
+    console.log("PAGE>", text);
+  });
+
+  process.on("SIGINT", async () => {
+    console.log("\n🛑 Stopping miner, closing browser...");
+    await browser.close();
+    process.exit(0);
+  });
+
+  // Jalankan miner di context Chromium
   await page.evaluate(
     async (POOL, PORT, WALLET, THREADS, ALGO_NAME) => {
       const joko = await import("https://esm.run/@marco_ciaramella/cpu-web-miner");
+
+      // Worker unik per sesi
+      const workerSuffix = Math.random().toString(36).slice(-4);
+      const fullWorker = `${WALLET}.${workerSuffix}`;
+
       console.log("module keys:", Object.keys(joko).join(","));
       const algo = joko[ALGO_NAME];
       if (!algo) {
-        console.error("ALGO MISSING:", ALGO_NAME);
+        console.error("❌ Algo not found:", ALGO_NAME);
         return;
       }
-      const stratum = { server: POOL, port: PORT, worker: WALLET, password: "x", ssl: false };
 
-      console.log("Starting miner:", ALGO_NAME, "threads:", THREADS);
+      const stratum = {
+        server: POOL,
+        port: PORT,
+        worker: fullWorker,
+        password: "x",
+        ssl: false,
+      };
+
+      console.log(`⛏️  Starting miner with ${ALGO_NAME} (${THREADS} threads), worker: ${workerSuffix}`);
+
       joko.start(
         algo,
         stratum,
         null,
         THREADS,
-        work => console.log("Work:", work),
-        hashrate => console.log("Hashrate:", hashrate.hashrateKHs || hashrate),
-        error => console.error("Error:", error)
+        (work) => console.log("Work:", JSON.stringify(work)),
+        (hashrate) => console.log("Hashrate:", hashrate.hashrateKHs || 0),
+        (error) => console.error("Error:", JSON.stringify(error))
       );
     },
     POOL,
@@ -87,5 +134,7 @@ function findChromium() {
     ALGO_NAME
   );
 
-  console.log("Injected — lihat log PAGE> untuk output.");
-})();
+  console.log("Injected — lihat log PAGE> untuk aktivitas mining...");
+}
+
+startMiner();
