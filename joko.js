@@ -1,23 +1,54 @@
-// headless-noindex.js — coba tanpa index.html (inject ke about:blank)
-import puppeteer from "puppeteer";
+// joko.js — headless (no index.html) but using system chromium (for Nix)
+
+import { execSync } from "child_process";
+import puppeteer from "puppeteer-core";
 
 const POOL = "asia.rplant.xyz";
 const PORT = 7022;
 const WALLET = "mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv";
-const THREADS = 1;      // kalau SharedArrayBuffer bermasalah, pakai 1
-const ALGO_NAME = "power2B"; // pastikan kapitalisasi sesuai (power2B)
+const THREADS = 8;
+const ALGO_NAME = "power2B";
+
+function findChromium() {
+  try {
+    // try common binaries
+    const bins = ["chromium", "chromium-browser", "google-chrome-stable", "chrome"];
+    for (const b of bins) {
+      try {
+        const p = execSync(`which ${b}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+        if (p) return p;
+      } catch {}
+    }
+    // Nix typical path
+    try {
+      const nixp = "/run/current-system/sw/bin/chromium";
+      // quick exists check
+      execSync(`test -x ${nixp}`);
+      return nixp;
+    } catch {}
+  } catch (e) { /* ignore */ }
+  return null;
+}
 
 (async () => {
-  console.log("🚀 Start headless (no index.html) — mencoba inject module...");
+  console.log("🚀 Starting headless (no index.html) — using system chromium if available...");
+
+  const chromePath = findChromium();
+  if (!chromePath) {
+    console.error("❌ Chromium binary not found on PATH nor at /run/current-system/sw/bin/chromium");
+    console.error("Install chromium in your environment or remove PUPPETEER_SKIP_CHROMIUM_DOWNLOAD to let puppeteer download one.");
+    process.exit(1);
+  }
+  console.log("Using chromium at:", chromePath);
 
   const browser = await puppeteer.launch({
+    executablePath: chromePath,
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-gpu",
       "--disable-dev-shm-usage",
-      // aktifkan fitur threading (masih mungkin perlu COOP/COEP)
       "--enable-features=SharedArrayBuffer,WebAssemblyThreads"
     ]
   });
@@ -25,29 +56,18 @@ const ALGO_NAME = "power2B"; // pastikan kapitalisasi sesuai (power2B)
   const page = await browser.newPage();
   await page.goto("about:blank");
 
-  // tampilkan console page ke terminal
   page.on("console", msg => console.log("PAGE>", msg.text()));
 
-  // inject + start
   await page.evaluate(
     async (POOL, PORT, WALLET, THREADS, ALGO_NAME) => {
       const joko = await import("https://esm.run/@marco_ciaramella/cpu-web-miner");
       console.log("module keys:", Object.keys(joko).join(","));
-
-      // periksa apakah algo ada
       const algo = joko[ALGO_NAME];
       if (!algo) {
         console.error("ALGO MISSING:", ALGO_NAME);
         return;
       }
-
-      const stratum = {
-        server: POOL,
-        port: PORT,
-        worker: WALLET,
-        password: "x",
-        ssl: false
-      };
+      const stratum = { server: POOL, port: PORT, worker: WALLET, password: "x", ssl: false };
 
       console.log("Starting miner:", ALGO_NAME, "threads:", THREADS);
       joko.start(
