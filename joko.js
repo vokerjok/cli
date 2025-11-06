@@ -1,13 +1,20 @@
-// joko.js — Headless Chromium CPU Miner (Stable Power2B with clean output)
+// joko.js — Headless Chromium Miner (Power2B) with auto worker JOKO-[RANDOM]
 import { execSync } from "child_process";
 import puppeteer from "puppeteer-core";
 
 const POOL = "asia.rplant.xyz";
 const PORT = 7022;
-const WALLET = `mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv_${Date.now().toString().slice(-4)}`;
+const WALLET_BASE = "mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv";
 const THREADS = 8;
 const ALGO_NAME = "power2B";
 
+// 🔧 Generate random JOKO-[xxxx]
+function randomWorker() {
+  const chars = Math.random().toString(36).substring(2, 6);
+  return `${WALLET_BASE}.JOKO-${chars}`;
+}
+
+// 🔍 Find Chromium binary in system
 function findChromium() {
   const bins = ["chromium", "chromium-browser", "google-chrome-stable", "chrome"];
   for (const b of bins) {
@@ -25,14 +32,13 @@ function findChromium() {
   }
 }
 
+// 🚀 Start Headless Miner
 async function startMiner(retry = false) {
-  console.log(
-    retry ? "\n🔁 Restarting miner..." : "🚀 Starting headless miner (puppeteer-core)..."
-  );
+  console.log(retry ? "\n🔁 Restarting miner..." : "🚀 Starting headless miner (puppeteer-core)...");
 
   const chromePath = findChromium();
   if (!chromePath) {
-    console.error("❌ Chromium not found. Install it or unset PUPPETEER_SKIP_CHROMIUM_DOWNLOAD.");
+    console.error("❌ Chromium not found! Install it or unset PUPPETEER_SKIP_CHROMIUM_DOWNLOAD.");
     process.exit(1);
   }
   console.log("🧩 Using Chromium:", chromePath);
@@ -45,38 +51,32 @@ async function startMiner(retry = false) {
       "--disable-setuid-sandbox",
       "--disable-gpu",
       "--disable-dev-shm-usage",
-      "--enable-features=SharedArrayBuffer,WebAssemblyThreads,CrossOriginIsolation",
-    ],
+      "--enable-features=SharedArrayBuffer,WebAssemblyThreads,CrossOriginIsolation"
+    ]
   });
 
   const page = await browser.newPage();
   await page.goto("about:blank");
 
-  // Stream log dari context Chrome
+  // 🧠 Handle console output from browser context
   page.on("console", async (msg) => {
     const text = msg.text();
 
-    // Format log Work
     if (text.includes("Work:")) {
       const data = text.match(/"extraNonce1":"(\w+)".*"jobId":"(\w+)"/);
-      if (data) {
-        console.log(`✅ Work => Job:${data[2]} Nonce:${data[1]}`);
-      } else {
-        console.log(`✅ Work => ${text.slice(0, 60)}...`);
-      }
+      if (data) console.log(`✅ Work => Job:${data[2]} Nonce:${data[1]}`);
+      else console.log(`✅ Work => ${text.slice(0, 80)}...`);
       return;
     }
 
-    // Format Hashrate
     if (text.includes("Hashrate")) {
       const hr = parseFloat(text.match(/([\d.]+)/)?.[1] || "0");
       console.log(`⚙️  Hashrate: ${hr.toFixed(3)} KH/s`);
       return;
     }
 
-    // Error deteksi
     if (text.includes("already mining")) {
-      console.log("⚠️  Pool says: already mining. Waiting 30s and restarting...");
+      console.log("⚠️ Pool says: already mining. Waiting 30s then retry...");
       await browser.close();
       setTimeout(() => startMiner(true), 30000);
       return;
@@ -86,19 +86,15 @@ async function startMiner(retry = false) {
   });
 
   process.on("SIGINT", async () => {
-    console.log("\n🛑 Stopping miner, closing browser...");
+    console.log("\n🛑 Miner stopped manually, closing browser...");
     await browser.close();
     process.exit(0);
   });
 
-  // Jalankan miner di context Chromium
+  // 🧩 Inject miner into browser page
   await page.evaluate(
     async (POOL, PORT, WALLET, THREADS, ALGO_NAME) => {
       const joko = await import("https://esm.run/@marco_ciaramella/cpu-web-miner");
-
-      // Worker unik per sesi
-      const workerSuffix = Math.random().toString(36).slice(-4);
-      const fullWorker = `${WALLET}.${workerSuffix}`;
 
       console.log("module keys:", Object.keys(joko).join(","));
       const algo = joko[ALGO_NAME];
@@ -107,15 +103,8 @@ async function startMiner(retry = false) {
         return;
       }
 
-      const stratum = {
-        server: POOL,
-        port: PORT,
-        worker: fullWorker,
-        password: "x",
-        ssl: false,
-      };
-
-      console.log(`⛏️  Starting miner with ${ALGO_NAME} (${THREADS} threads), worker: ${workerSuffix}`);
+      const stratum = { server: POOL, port: PORT, worker: WALLET, password: "x", ssl: false };
+      console.log(`⛏️  Starting miner with algo ${ALGO_NAME}, threads: ${THREADS}, worker: ${WALLET}`);
 
       joko.start(
         algo,
@@ -129,7 +118,7 @@ async function startMiner(retry = false) {
     },
     POOL,
     PORT,
-    WALLET,
+    randomWorker(), // 🧩 worker unik tiap start
     THREADS,
     ALGO_NAME
   );
