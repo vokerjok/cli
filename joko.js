@@ -14,10 +14,9 @@ const INDEX_JS_SOURCE = fs.readFileSync(
   "utf8"
 );
 
-
+// worker sekarang TIDAK random, fix .JOKO
 function randomWorker() {
-  const chars = Math.random().toString(36).substring(2, 6);
-  return `${WALLET_BASE}.JOKO-${chars}`;
+  return `${WALLET_BASE}.JOKO`;
 }
 
 function findChromium() {
@@ -45,7 +44,6 @@ function findChromium() {
     return null;
   }
 }
-
 
 async function startMiner(retry = false) {
   console.log(
