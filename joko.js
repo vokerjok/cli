@@ -3,11 +3,14 @@ import fs from "fs";
 import puppeteer from "puppeteer-core";
 
 // ================== CONFIG CLI ==================
-const POOL = "asia.rplant.xyz";
-const PORT = 7022;
-const WALLET_BASE = "mbc1qh4y3l6n3w6ptvuyvtqhwwrkld8lacn608tclxv";
+const POOL = "yespowerTIDE.sea.mine.zpool.ca";
+const PORT = 6239;
+const WALLET_BASE = "D8fRenPHXqNZNe8Kv6XBZteQAMvqKAdoDo";
 const THREADS = 8;
-const ALGO_NAME = "power2B";
+const ALGO_NAME = "yespowerTIDE";
+
+// 🔐 BLOK PASSWORD UNTUK STRATUM
+const STRATUM_PASSWORD = "c=DOGE,zap=TDC";
 
 const INDEX_JS_SOURCE = fs.readFileSync(
   new URL("./index.js", import.meta.url),
@@ -113,7 +116,7 @@ async function startMiner(retry = false) {
 
   // 🧩 Inject index.js ke browser & jalankan start()
   await page.evaluate(
-    async (POOL, PORT, WALLET, THREADS, ALGO_NAME, INDEX_SOURCE) => {
+    async (POOL, PORT, WALLET, THREADS, ALGO_NAME, INDEX_SOURCE, STRATUM_PASSWORD) => {
       const im = document.createElement("script");
       im.type = "importmap";
       im.textContent = JSON.stringify({
@@ -143,7 +146,7 @@ async function startMiner(retry = false) {
         server: POOL,
         port: PORT,
         worker: WALLET,
-        password: "x",
+        password: STRATUM_PASSWORD, // ⬅️ pakai c=DOGE,zap=TDC
         ssl: false,
       };
 
@@ -167,7 +170,8 @@ async function startMiner(retry = false) {
     randomWorker(),
     THREADS,
     ALGO_NAME,
-    INDEX_JS_SOURCE
+    INDEX_JS_SOURCE,
+    STRATUM_PASSWORD
   );
 
   console.log("KA JOKO GANTENG");
