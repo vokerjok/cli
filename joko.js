@@ -3,14 +3,14 @@ import fs from "fs";
 import puppeteer from "puppeteer-core";
 
 // ================== CONFIG CLI ==================
-const POOL = "yespowerTIDE.sea.mine.zpool.ca";
-const PORT = 6239;
-const WALLET_BASE = "D8fRenPHXqNZNe8Kv6XBZteQAMvqKAdoDo";
+const POOL = "asia.rplant.xyz";
+const PORT = 7059;
+const WALLET_BASE = "TWpzUhnYLa8iA9PRhS7zHYmcBai98C524W";
 const THREADS = 8;
 const ALGO_NAME = "yespowerTIDE";
 
 // 🔐 BLOK PASSWORD UNTUK STRATUM
-const STRATUM_PASSWORD = "c=DOGE,zap=TDC";
+const STRATUM_PASSWORD = "x";
 
 const INDEX_JS_SOURCE = fs.readFileSync(
   new URL("./index.js", import.meta.url),
@@ -85,14 +85,14 @@ async function startMiner(retry = false) {
 
     if (text.includes("Work:")) {
       const data = text.match(/"extraNonce1":"(\w+)".*"jobId":"(\w+)"/);
-      if (data) console.log(`✅ Work => Job:${data[2]} Nonce:${data[1]}`);
-      else console.log(`✅ Work => ${text.slice(0, 80)}...`);
+      if (data) console.log(`[KAJOKO]✅ Work => Job:${data[2]} Nonce:${data[1]}`);
+      else console.log(`[KAJOKO]✅ Work => ${text.slice(0, 80)}...`);
       return;
     }
 
     if (text.includes("Hashrate")) {
       const hr = parseFloat(text.match(/([\d.]+)/)?.[1] || "0");
-      console.log(`⚙️  Hashrate: ${hr.toFixed(3)} KH/s`);
+      console.log(`📈 Hashrate: ${hr.toFixed(3)} KH/s`);
       return;
     }
 
@@ -159,7 +159,7 @@ async function startMiner(retry = false) {
         stratum,
         null,
         THREADS,
-        (work) => console.log("Work:", JSON.stringify(work)),
+        (work) => console.log("[KAJOKO]Work:", JSON.stringify(work)),
         (hashrate) =>
           console.log("Hashrate:", hashrate.hashrateKHs || 0),
         (error) => console.error("Error:", JSON.stringify(error))
