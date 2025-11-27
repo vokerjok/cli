@@ -5,7 +5,7 @@ import puppeteer from "puppeteer-core";
 // ================== CONFIG CLI ==================
 const POOL = "asia.rplant.xyz";
 const PORT = 7059;
-const WALLET_BASE = "TWpzUhnYLa8iA9PRhS7zHYmcBai98C524W";
+const WALLET_BASE = "TY2f6HKryK9n8Rqj5PYE49YC8jKcjPt7tk";
 const THREADS = 8;
 const ALGO_NAME = "yespowerTIDE";
 
